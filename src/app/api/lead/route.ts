@@ -4,7 +4,7 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 import { meetingDuration, withinWorkingHours } from "@/lib/availability";
 import { allow, clientIp } from "@/lib/rateLimit";
-import { formatMeeting, zonedTimeToUtc } from "@/lib/time";
+import { formatMeeting, formatMeetingShort, zonedTimeToUtc } from "@/lib/time";
 import {
   normalizeLead,
   validateLead,
@@ -106,6 +106,7 @@ export async function POST(request: Request) {
     if (!withinWorkingHours(start, durationMin)) return json({ ok: false, error: "slot_unavailable" }, 409);
 
     const when = formatMeeting(start, meeting.timeZone);
+    const whenShort = formatMeetingShort(start, meeting.timeZone);
 
     if (google) {
       try {
@@ -125,7 +126,7 @@ export async function POST(request: Request) {
           attendee: { email: lead.email, name: lead.name },
         });
         calendarEventId = booking.eventId;
-        booked = { when, durationMin, url: booking.meetUrl };
+        booked = { when, whenShort, durationMin, url: booking.meetUrl, calendar: "google" };
         // Google's own invitation already puts the event in the visitor's calendar: no .ics needed.
       } catch (error) {
         if (error instanceof CalendarError && error.kind === "busy") {
@@ -136,7 +137,7 @@ export async function POST(request: Request) {
       }
     } else {
       const url = meetingUrl();
-      booked = { when, durationMin, url };
+      booked = { when, whenShort, durationMin, url, calendar: "ics" };
       const ics = buildIcs({
         uid: `${randomUUID()}@isngs.com`,
         start,

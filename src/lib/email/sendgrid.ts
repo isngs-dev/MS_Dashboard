@@ -49,6 +49,13 @@ export async function sendMail(config: EmailConfig, mail: MailInput): Promise<vo
       { type: "text/plain", value: mail.text },
       ...(mail.html ? [{ type: "text/html", value: mail.html }] : []),
     ],
+    // Transactional mail: no link rewriting (click tracking turns the Meet link into a sendgrid.net
+    // address, which looks like phishing to people and to spam filters) and no tracking pixel.
+    tracking_settings: {
+      click_tracking: { enable: false, enable_text: false },
+      open_tracking: { enable: false },
+      subscription_tracking: { enable: false },
+    },
     ...(SANDBOX ? { mail_settings: { sandbox_mode: { enable: true } } } : {}),
     ...(mail.attachments?.length
       ? { attachments: mail.attachments.map((a) => ({ ...a, disposition: "attachment" })) }

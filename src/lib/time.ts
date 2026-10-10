@@ -69,7 +69,20 @@ export function zonedTimeToUtc(date: string, time: string, timeZone: string): Da
   return new Date(utc);
 }
 
-/** "Tuesday, October 14, 2026 at 3:00 PM GMT+1" in the given zone. */
+/** "Tue, Oct 14, 3:00 PM EDT" in the given zone (short enough for an email subject). */
+export function formatMeetingShort(at: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(at);
+}
+
+/** "Tuesday, October 14, 2026 at 3:00 PM EDT" in the given zone. */
 export function formatMeeting(at: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-US", {
     timeZone,
