@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import FloatingField from "@/components/form/FloatingField";
 import SlotPicker from "@/components/form/SlotPicker";
 import { useReducedMotion } from "@/hooks/useQuality";
 import { getLenis } from "@/lib/scroll";
+import { BOOKING_TIME_ZONE, dateInZone } from "@/lib/time";
 import { MAX_DAYS_AHEAD, validateMeeting, type MeetingRequest } from "@/lib/validation";
 import { FORM, SCHEDULE } from "@/content/copy";
 
@@ -28,11 +29,6 @@ type Props = {
 
 const noopSubscribe = () => () => {};
 
-/** YYYY-MM-DD in the visitor's local time (what <input type="date"> expects). */
-function localDate(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
 
 function Spinner() {
   return (
@@ -63,9 +59,10 @@ function Dialog({ email, pending, failure, onEdit, onBook, onSkip, onClose }: Pr
   const dialog = useRef<HTMLDivElement>(null);
   const busy = pending !== null;
 
-  const timeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", []);
-  const [today] = useState(() => localDate(new Date()));
-  const [latest] = useState(() => localDate(new Date(Date.now() + MAX_DAYS_AHEAD * 86_400_000)));
+  // Every time in this pop-up is Eastern Time, whatever the visitor's own zone is.
+  const timeZone = BOOKING_TIME_ZONE;
+  const [today] = useState(() => dateInZone(new Date(), BOOKING_TIME_ZONE));
+  const [latest] = useState(() => dateInZone(new Date(Date.now() + MAX_DAYS_AHEAD * 86_400_000), BOOKING_TIME_ZONE));
 
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
@@ -226,7 +223,7 @@ function Dialog({ email, pending, failure, onEdit, onBook, onSkip, onClose }: Pr
           />
         </div>
         <p className="mt-3 text-sm text-faint">
-          {SCHEDULE.timezone}: <span className="font-medium text-muted">{timeZone.replace(/_/g, " ")}</span>
+          {SCHEDULE.timezone}: <span className="font-medium text-muted">{SCHEDULE.timezoneName}</span>
         </p>
 
         <div className="mt-7 flex flex-col gap-3">

@@ -37,9 +37,7 @@ services:
       - key: GOOGLE_CALENDAR_ID
         value: primary
 
-      # When the team takes calls (working hours are in MEETING_TIMEZONE).
-      - key: MEETING_TIMEZONE
-        value: Asia/Kolkata
+      # When the team takes calls, in Eastern Time (the pop-up always shows Eastern Time).
       - key: MEETING_HOURS
         value: 09:00-18:00
       - key: MEETING_DURATION_MIN

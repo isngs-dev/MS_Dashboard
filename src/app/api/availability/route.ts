@@ -10,9 +10,9 @@ export const runtime = "nodejs";
 const DAY_MS = 86_400_000;
 
 /**
- * GET /api/availability?date=YYYY-MM-DD&tz=Africa/Lagos
+ * GET /api/availability?date=YYYY-MM-DD&tz=America/New_York
  *
- * The bookable start times on that date (visitor's time zone), each flagged `busy` when the
+ * The bookable start times on that date (wall clock in `tz`), each flagged `busy` when the
  * team's Google Calendar already has something then (or the time has passed). It only ever
  * reveals free / busy, never what the events are. The booking endpoint re-checks the slot,
  * so this is for showing the picker, not for security.

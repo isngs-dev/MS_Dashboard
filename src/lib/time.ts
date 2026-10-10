@@ -6,6 +6,17 @@
  * calendar invite and to check the booking is in the future.
  */
 
+/**
+ * The time zone every booking is offered in. "America/New_York" is Eastern Time: it follows
+ * daylight saving by itself (EST in winter, EDT in summer), which a fixed UTC-5 would not.
+ */
+export const BOOKING_TIME_ZONE = "America/New_York";
+
+/** YYYY-MM-DD of an instant on the wall clock of `timeZone`. */
+export function dateInZone(at: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+}
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 

@@ -1,16 +1,15 @@
 /**
  * Which times can be booked.
  *
- * The team takes calls during working hours in one time zone (MEETING_TIMEZONE, MEETING_HOURS);
- * the visitor sees the matching start times on their chosen date, in their own time zone.
+ * The team takes calls during working hours (MEETING_HOURS) in Eastern Time (BOOKING_TIME_ZONE);
+ * the pop-up shows the start times on the chosen date in that same zone.
  * Server-only (reads the environment), but free of Node-specific imports.
  */
-import { isValidTimeZone, zonedTimeToUtc } from "@/lib/time";
+import { BOOKING_TIME_ZONE, zonedTimeToUtc } from "@/lib/time";
 
 /** Slots are offered every 30 minutes. */
 const STEP_MIN = 30;
 
-const DEFAULT_TIMEZONE = "Asia/Kolkata";
 const DEFAULT_HOURS = { startMin: 9 * 60, endMin: 18 * 60 };
 
 export type WorkingHours = { timeZone: string; startMin: number; endMin: number };
@@ -23,10 +22,9 @@ export function meetingDuration(): number {
   return Number.isFinite(n) && n >= 15 && n <= 120 ? Math.round(n) : 30;
 }
 
-/** MEETING_TIMEZONE (IANA zone) and MEETING_HOURS ("09:00-18:00", local to that zone). */
+/** MEETING_HOURS ("09:00-18:00"), read as Eastern Time (BOOKING_TIME_ZONE). */
 export function workingHours(): WorkingHours {
-  const zone = process.env.MEETING_TIMEZONE?.trim();
-  const timeZone = zone && isValidTimeZone(zone) ? zone : DEFAULT_TIMEZONE;
+  const timeZone = BOOKING_TIME_ZONE;
 
   const match = (process.env.MEETING_HOURS ?? "").trim().match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/);
   if (match) {

@@ -141,8 +141,9 @@ After choosing a date the visitor sees a grid of start times (every 30 minutes).
 **greyed out with a line through them and cannot be selected** (`src/components/form/SlotPicker.tsx`, data from `GET /api/availability`, which only returns free / busy,
 never event details).
 
-- Only your **working hours** are offered: `MEETING_HOURS` (default `09:00-18:00`) in the time zone `MEETING_TIMEZONE` (default `Asia/Kolkata`). Set both in `.env.local`.
-  The visitor sees the matching times in *their* time zone, so a visitor in New York sees the early-morning slots that fall inside your working day.
+- Everything in the pop-up is in **Eastern Time** (`America/New_York`, so EST in winter and EDT in summer), whatever time zone the visitor is in: the date, the times
+  and the confirmation email. The zone is the `BOOKING_TIME_ZONE` constant in `src/lib/time.ts`.
+- Only your **working hours** are offered: `MEETING_HOURS` (default `09:00-18:00`, read as Eastern Time). Set it in `.env.local`.
 - Free/busy comes from the same calendar the bookings go to (`GOOGLE_CALENDAR_ID`). Without Google credentials the grid still shows your working hours, with nothing greyed out for busy.
 - The booking endpoint checks the slot again (working hours and free/busy), so a time that gets taken while the pop-up is open is rejected; the pop-up then refreshes the grid.
   Availability answers are cached for 15 seconds and dropped as soon as this server books or cancels something.
