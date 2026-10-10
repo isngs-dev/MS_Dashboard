@@ -188,13 +188,15 @@ export type BookingInput = {
 
 export type Booking = { eventId: string; meetUrl: string; eventUrl?: string };
 
-/** True when the calendar already has something in that window. */
-async function isBusy(cfg: GoogleConfig, start: Date, end: Date): Promise<boolean> {
+export type BusyWindow = { start: Date; end: Date };
+
+/** The calendar's busy windows between `from` and `to` (only times, never event titles or details). */
+export async function listBusy(cfg: GoogleConfig, from: Date, to: Date): Promise<BusyWindow[]> {
   const result = await calendarApi<{
-    calendars?: Record<string, { busy?: unknown[]; errors?: { reason?: string }[] }>;
+    calendars?: Record<string, { busy?: { start: string; end: string }[]; errors?: { reason?: string }[] }>;
   }>(cfg, "/freeBusy", {
     method: "POST",
-    body: { timeMin: start.toISOString(), timeMax: end.toISOString(), items: [{ id: cfg.calendarId }] },
+    body: { timeMin: from.toISOString(), timeMax: to.toISOString(), items: [{ id: cfg.calendarId }] },
   });
 
   // the response is keyed by the id we sent ("primary" or an address); there is exactly one entry
@@ -203,7 +205,29 @@ async function isBusy(cfg: GoogleConfig, start: Date, end: Date): Promise<boolea
   if (calendar.errors?.length) {
     throw new CalendarError(`Google free/busy error: ${calendar.errors[0]?.reason ?? "unknown"}`, "api");
   }
-  return (calendar.busy?.length ?? 0) > 0;
+  return (calendar.busy ?? []).map((b) => ({ start: new Date(b.start), end: new Date(b.end) }));
+}
+
+// Many visitors looking at the same day should not each cost a Google call. Never used for the
+// booking itself, and cleared whenever this server books or cancels something.
+const BUSY_CACHE_TTL_MS = 15_000;
+const busyCache = new Map<string, { at: number; busy: BusyWindow[] }>();
+
+/** Like listBusy, but may answer from a few-seconds-old result. Only for showing availability. */
+export async function listBusyCached(cfg: GoogleConfig, from: Date, to: Date): Promise<BusyWindow[]> {
+  const key = `${cfg.calendarId}|${from.getTime()}|${to.getTime()}`;
+  const hit = busyCache.get(key);
+  if (hit && Date.now() - hit.at < BUSY_CACHE_TTL_MS) return hit.busy;
+
+  const busy = await listBusy(cfg, from, to);
+  if (busyCache.size > 200) busyCache.clear();
+  busyCache.set(key, { at: Date.now(), busy });
+  return busy;
+}
+
+/** True when the calendar already has something in that window. */
+async function isBusy(cfg: GoogleConfig, start: Date, end: Date): Promise<boolean> {
+  return (await listBusy(cfg, start, end)).length > 0;
 }
 
 /**
@@ -241,6 +265,8 @@ export async function bookMeeting(cfg: GoogleConfig, input: BookingInput): Promi
     },
   });
 
+  busyCache.clear(); // the slot just got taken
+
   // Meet links are normally ready immediately; if Google is still creating it, look again briefly.
   let event = created;
   for (let attempt = 0; attempt < 4 && !meetUrlOf(event); attempt++) {
@@ -258,6 +284,7 @@ export async function bookMeeting(cfg: GoogleConfig, input: BookingInput): Promi
 
 /** Removes a booking again (used when the confirmation email could not be sent). */
 export async function cancelMeeting(cfg: GoogleConfig, eventId: string): Promise<void> {
+  busyCache.clear(); // the slot is free again
   await calendarApi<void>(cfg, `/calendars/${encodeURIComponent(cfg.calendarId)}/events/${encodeURIComponent(eventId)}`, {
     method: "DELETE",
     // tell the visitor too: they may already have received Google's invitation

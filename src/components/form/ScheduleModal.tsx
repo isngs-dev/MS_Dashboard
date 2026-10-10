@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import FloatingField from "@/components/form/FloatingField";
+import SlotPicker from "@/components/form/SlotPicker";
 import { useReducedMotion } from "@/hooks/useQuality";
 import { getLenis } from "@/lib/scroll";
 import { MAX_DAYS_AHEAD, validateMeeting, type MeetingRequest } from "@/lib/validation";
@@ -69,6 +70,18 @@ function Dialog({ email, pending, failure, onEdit, onBook, onSkip, onClose }: Pr
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [touched, setTouched] = useState({ date: false, time: false });
+  // bumped to make the time picker ask the server again
+  const [refresh, setRefresh] = useState(0);
+  const [seenFailure, setSeenFailure] = useState<Props["failure"]>(null);
+
+  // The server says the chosen time was just taken: forget it and show the times as they are now.
+  if (failure !== seenFailure) {
+    setSeenFailure(failure);
+    if (failure === "slot") {
+      setTime("");
+      setRefresh((n) => n + 1);
+    }
+  }
 
   // errors are computed live but only shown for fields the visitor has visited
   const live = validateMeeting({ date, time, timeZone });
@@ -96,7 +109,7 @@ function Dialog({ email, pending, failure, onEdit, onBook, onSkip, onClose }: Pr
     setTouched({ date: true, time: true });
     const errors = validateMeeting({ date, time, timeZone });
     if (errors.date || errors.time) {
-      dialog.current?.querySelector<HTMLInputElement>(errors.date ? "#meet-date" : "#meet-time")?.focus();
+      dialog.current?.querySelector<HTMLInputElement>(errors.date ? "#meet-date" : "input[data-slot]:not(:disabled)")?.focus();
       return;
     }
     onBook({ date, time, timeZone });
@@ -177,7 +190,7 @@ function Dialog({ email, pending, failure, onEdit, onBook, onSkip, onClose }: Pr
         <p className="mt-3 text-base leading-relaxed text-muted">{SCHEDULE.body}</p>
         <p className="mt-1 break-all text-sm text-faint">{email}</p>
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <div className="mt-6 grid gap-5">
           <FloatingField
             id="meet-date"
             name="meeting-date"
@@ -192,26 +205,24 @@ function Dialog({ email, pending, failure, onEdit, onBook, onSkip, onClose }: Pr
             touched={touched.date}
             onChange={(v) => {
               setDate(v);
+              setTime(""); // the times differ from day to day
               onEdit();
             }}
             onBlur={() => setTouched((t) => ({ ...t, date: true }))}
           />
-          <FloatingField
-            id="meet-time"
-            name="meeting-time"
-            type="time"
-            step={900}
-            label={SCHEDULE.time}
+          <SlotPicker
+            date={date && !live.date ? date : ""}
+            timeZone={timeZone}
             value={time}
-            forceFloat
+            refreshKey={refresh}
             disabled={busy}
-            error={shown.time}
-            touched={touched.time}
+            // after "that time was just taken" the message at the bottom already says what to do
+            error={failure === "slot" ? undefined : shown.time}
             onChange={(v) => {
               setTime(v);
+              setTouched((t) => ({ ...t, time: true }));
               onEdit();
             }}
-            onBlur={() => setTouched((t) => ({ ...t, time: true }))}
           />
         </div>
         <p className="mt-3 text-sm text-faint">

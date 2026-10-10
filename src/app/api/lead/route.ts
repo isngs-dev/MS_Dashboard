@@ -2,7 +2,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { allow } from "@/lib/rateLimit";
+import { meetingDuration, withinWorkingHours } from "@/lib/availability";
+import { allow, clientIp } from "@/lib/rateLimit";
 import { formatMeeting, zonedTimeToUtc } from "@/lib/time";
 import {
   normalizeLead,
@@ -101,6 +102,9 @@ export async function POST(request: Request) {
   let calendarEventId: string | undefined;
 
   if (meeting && start) {
+    // The picker only offers working hours; this keeps direct API calls to the same rule.
+    if (!withinWorkingHours(start, durationMin)) return json({ ok: false, error: "slot_unavailable" }, 409);
+
     const when = formatMeeting(start, meeting.timeZone);
 
     if (google) {
@@ -187,11 +191,6 @@ function json(data: Record<string, unknown>, status = 200) {
   return NextResponse.json(data, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-function clientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  return (forwarded?.split(",")[0] ?? request.headers.get("x-real-ip") ?? "unknown").trim();
-}
-
 /** Visitor text going into a calendar event: Google renders HTML in descriptions, so strip tags and line breaks. */
 function plain(value: string): string {
   return value.replace(/[<>\r\n]/g, " ").replace(/\s+/g, " ").trim();
@@ -205,11 +204,6 @@ async function undoBooking(google: GoogleConfig | null, eventId: string | undefi
   } catch (error) {
     console.error("[lead] could not cancel the calendar event after an email failure:", error instanceof Error ? error.message : error);
   }
-}
-
-function meetingDuration(): number {
-  const n = Number(process.env.MEETING_DURATION_MIN);
-  return Number.isFinite(n) && n >= 15 && n <= 120 ? Math.round(n) : 30;
 }
 
 /**

@@ -135,8 +135,20 @@ A plain service account cannot create Meet links or invite people on its own, wh
 
 Other variables: `GOOGLE_EXTRA_ATTENDEES` (comma separated teammates added to every meeting), `MEETING_DURATION_MIN` (15 to 120, default 30). All are listed in `.env.example`.
 
-Known limits: there is no business-hours or slot grid yet (any free time up to 90 days ahead can be picked), and two visitors submitting the exact same free slot at
-the same moment could both pass the free/busy check; the second one would still see the conflict the next time the calendar is read.
+### Which times can be picked
+
+After choosing a date the visitor sees a grid of start times (every 30 minutes). Times that are **already booked** on your Google Calendar, or already past, are
+**greyed out with a line through them and cannot be selected** (`src/components/form/SlotPicker.tsx`, data from `GET /api/availability`, which only returns free / busy,
+never event details).
+
+- Only your **working hours** are offered: `MEETING_HOURS` (default `09:00-18:00`) in the time zone `MEETING_TIMEZONE` (default `Asia/Kolkata`). Set both in `.env.local`.
+  The visitor sees the matching times in *their* time zone, so a visitor in New York sees the early-morning slots that fall inside your working day.
+- Free/busy comes from the same calendar the bookings go to (`GOOGLE_CALENDAR_ID`). Without Google credentials the grid still shows your working hours, with nothing greyed out for busy.
+- The booking endpoint checks the slot again (working hours and free/busy), so a time that gets taken while the pop-up is open is rejected; the pop-up then refreshes the grid.
+  Availability answers are cached for 15 seconds and dropped as soon as this server books or cancels something.
+
+Known limits: weekends are offered like any other day (there is no day-of-week setting yet), and two visitors submitting the exact same free slot at the same moment
+could both pass the free/busy check; the second one would still see the conflict the next time the calendar is read.
 
 ## Notes
 

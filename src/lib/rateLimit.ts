@@ -6,6 +6,12 @@
  */
 const hits = new Map<string, { count: number; resetAt: number }>();
 
+/** Best-effort caller address from the proxy headers (used as the rate-limit key). */
+export function clientIp(request: Request): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  return (forwarded?.split(",")[0] ?? request.headers.get("x-real-ip") ?? "unknown").trim();
+}
+
 /** Returns true if the call is allowed, false once `limit` is exceeded inside `windowMs`. */
 export function allow(key: string, limit: number, windowMs: number): boolean {
   const now = Date.now();
