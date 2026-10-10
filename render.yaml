@@ -10,8 +10,8 @@ services:
     autoDeployTrigger: commit
     # TypeScript, Tailwind and ESLint are devDependencies, so install them for the build.
     buildCommand: npm ci --include=dev && npm run build
-    # `npm start` is pinned to port 3107 for local use; Render tells us the port to listen on.
-    startCommand: npx next start -H 0.0.0.0 -p $PORT
+    # `npm start` (scripts/start.mjs) listens on Render's $PORT, and on 3107 when run locally.
+    startCommand: npm start
     healthCheckPath: /
     envVars:
       - key: NODE_VERSION

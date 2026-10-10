@@ -153,8 +153,8 @@ could both pass the free/busy check; the second one would still see the conflict
 ## Deploy on Render
 
 `render.yaml` is a Render Blueprint: Dashboard, New +, **Blueprint**, pick this repo. Render asks for the secrets (SendGrid and Google values, see `.env.example`);
-everything else is pre-filled. It builds with `npm ci --include=dev && npm run build` and starts with `npx next start -H 0.0.0.0 -p $PORT` (Render picks the port;
-`npm start` is pinned to 3107 for local use). After the first deploy:
+everything else is pre-filled. It builds with `npm ci --include=dev && npm run build` and starts with `npm start`, which listens on the `PORT` Render provides (on 3107 when run locally).
+If you create the service by hand instead, use those same two commands. After the first deploy:
 
 1. Google Cloud consent screen must be **Internal** or **In production**, otherwise the refresh token expires after 7 days.
 2. Add the Render URL (and your custom domain) to the chatbot's allowed origins on the chat server.
@@ -164,5 +164,5 @@ The in-memory rate limiter and availability cache assume a single instance; keep
 
 ## Notes
 
-- Dev and `start` run on port 3107 (change it in `package.json`).
+- Dev runs on port 3107 (change it in `package.json`). `npm start` uses the `PORT` environment variable when set (hosting platforms set it), otherwise 3107.
 - three.js logs a `THREE.Clock` deprecation warning in dev; it comes from React Three Fiber internals and is harmless.

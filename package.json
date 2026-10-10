@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "next dev -p 3107",
     "build": "next build",
-    "start": "next start -p 3107",
-    "fast": "next build && next start -p 3107",
+    "start": "node scripts/start.mjs",
+    "fast": "next build && node scripts/start.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "build:fonts": "node scripts/build-typeface.mjs",
