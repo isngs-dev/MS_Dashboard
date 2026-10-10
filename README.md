@@ -150,6 +150,18 @@ never event details).
 Known limits: weekends are offered like any other day (there is no day-of-week setting yet), and two visitors submitting the exact same free slot at the same moment
 could both pass the free/busy check; the second one would still see the conflict the next time the calendar is read.
 
+## Deploy on Render
+
+`render.yaml` is a Render Blueprint: Dashboard, New +, **Blueprint**, pick this repo. Render asks for the secrets (SendGrid and Google values, see `.env.example`);
+everything else is pre-filled. It builds with `npm ci --include=dev && npm run build` and starts with `npx next start -H 0.0.0.0 -p $PORT` (Render picks the port;
+`npm start` is pinned to 3107 for local use). After the first deploy:
+
+1. Google Cloud consent screen must be **Internal** or **In production**, otherwise the refresh token expires after 7 days.
+2. Add the Render URL (and your custom domain) to the chatbot's allowed origins on the chat server.
+3. Make one real booking and check both emails arrive.
+
+The in-memory rate limiter and availability cache assume a single instance; keep it at 1 or move them to Redis.
+
 ## Notes
 
 - Dev and `start` run on port 3107 (change it in `package.json`).

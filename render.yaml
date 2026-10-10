@@ -1,0 +1,46 @@
+# Render Blueprint: Dashboard > New + > Blueprint > pick this repo.
+# Secrets are marked `sync: false`: Render asks for them when the Blueprint is created (they never live in git).
+services:
+  - type: web
+    name: ms-dashboard-landing
+    runtime: node
+    region: singapore
+    plan: starter # the free plan sleeps after 15 minutes idle, which is bad for a booking form
+    branch: main
+    autoDeployTrigger: commit
+    # TypeScript, Tailwind and ESLint are devDependencies, so install them for the build.
+    buildCommand: npm ci --include=dev && npm run build
+    # `npm start` is pinned to port 3107 for local use; Render tells us the port to listen on.
+    startCommand: npx next start -H 0.0.0.0 -p $PORT
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+
+      # Confirmation emails (SendGrid). Without these the booking form answers 503 on purpose.
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: SENDGRID_FROM_EMAIL
+        sync: false
+      - key: SENDGRID_FROM_NAME
+        value: iSN
+      - key: LEAD_NOTIFICATION_TO # optional: also email the team about every lead
+        sync: false
+
+      # Google Calendar + Meet bookings (OAuth). Get the refresh token locally with `npm run google:auth`.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REFRESH_TOKEN
+        sync: false
+      - key: GOOGLE_CALENDAR_ID
+        value: primary
+
+      # When the team takes calls (working hours are in MEETING_TIMEZONE).
+      - key: MEETING_TIMEZONE
+        value: Asia/Kolkata
+      - key: MEETING_HOURS
+        value: 09:00-18:00
+      - key: MEETING_DURATION_MIN
+        value: "30"
