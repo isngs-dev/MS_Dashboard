@@ -17,17 +17,21 @@ services:
       - key: NODE_VERSION
         value: "22"
 
-      # Confirmation emails (SendGrid). Without these the booking form answers 503 on purpose.
-      - key: SENDGRID_API_KEY
+      # Confirmation emails, sent through the Gmail API with the Google credentials below.
+      # Without a sender the booking form answers 503 on purpose.
+      - key: MAIL_FROM_EMAIL # the Google account that signed in (or one of its "Send mail as" aliases)
         sync: false
-      - key: SENDGRID_FROM_EMAIL
+      - key: MAIL_FROM_NAME # the sender name people see in their inbox
+        value: MS Dashboard
+      - key: MAIL_REPLY_TO # optional: where replies go (default: the From address)
         sync: false
-      - key: SENDGRID_FROM_NAME
-        value: iSN
+      - key: MAIL_CC # optional: Cc on the visitor's confirmation email (comma-separated)
+        sync: false
       - key: LEAD_NOTIFICATION_TO # optional: also email the team about every lead
         sync: false
 
-      # Google Calendar + Meet bookings (OAuth). Get the refresh token locally with `npm run google:auth`.
+      # Google Calendar + Meet bookings and Gmail sending (OAuth). Get the refresh token locally with
+      # `npm run google:auth`; it must have been created after Gmail was added so it may send mail.
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET

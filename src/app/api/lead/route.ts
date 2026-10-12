@@ -1,5 +1,5 @@
-import { randomBytes, randomUUID } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { meetingDuration, withinWorkingHours } from "@/lib/availability";
@@ -12,8 +12,8 @@ import {
   type LeadPayload,
   type MeetingRequest,
 } from "@/lib/validation";
-import { buildIcs } from "@/lib/email/ics";
-import { emailConfig, isEmailConfigured, sendMail, type Attachment } from "@/lib/email/sendgrid";
+import { googleCalendarLink } from "@/lib/email/calendarLink";
+import { emailConfig, isEmailConfigured, sendMail } from "@/lib/email/gmail";
 import { buildConfirmationEmail, buildTeamNotification, type BookedMeeting } from "@/lib/email/templates";
 import { bookMeeting, cancelMeeting, CalendarError, googleConfig, type GoogleConfig } from "@/lib/google/calendar";
 
@@ -29,8 +29,9 @@ const IS_PROD = process.env.NODE_ENV === "production";
  *  - booked a call:
  *      Google Calendar configured -> checks the slot is free, creates the event with a
  *                                    Google Meet link and invites the visitor
- *      otherwise                  -> a private Jitsi room (or MEETING_URL) + a .ics invite
- *    then sends the confirmation email (with the meeting link) through SendGrid
+ *      otherwise                  -> a private Jitsi room (or MEETING_URL)
+ *    then sends the confirmation email (meeting link + "Add to Google Calendar" link, no
+ *    attachment) through the Gmail API
  *  - "just email me": sends the normal confirmation email
  *  - optionally tells the iSN team (set LEAD_NOTIFICATION_TO)
  *
@@ -90,7 +91,7 @@ export async function POST(request: Request) {
 
   // Fail before touching the calendar: an event nobody is told about would be worse than an error.
   if (!emailReady && IS_PROD) {
-    console.error("[lead] SENDGRID_API_KEY / SENDGRID_FROM_EMAIL are not set; cannot send the confirmation email.");
+    console.error("[lead] Google credentials / MAIL_FROM_EMAIL are not set; cannot send the confirmation email.");
     return json({ ok: false, error: "email_not_configured" }, 503);
   }
 
@@ -98,7 +99,6 @@ export async function POST(request: Request) {
   const google = googleConfig();
   const durationMin = meetingDuration();
   let booked: BookedMeeting | undefined;
-  let attachments: Attachment[] | undefined;
   let calendarEventId: string | undefined;
 
   if (meeting && start) {
@@ -107,6 +107,21 @@ export async function POST(request: Request) {
 
     const when = formatMeeting(start, meeting.timeZone);
     const whenShort = formatMeetingShort(start, meeting.timeZone);
+
+    // No attachment: the email carries an "Add to Google Calendar" link instead.
+    const meetingFor = (url: string): BookedMeeting => ({
+      when,
+      whenShort,
+      durationMin,
+      url,
+      calendarUrl: googleCalendarLink({
+        start,
+        durationMin,
+        title: "MS Dashboard call with iSN",
+        details: `Your MS Dashboard call with the iSN team.\nJoin: ${url}`,
+        location: url,
+      }),
+    });
 
     if (google) {
       try {
@@ -126,8 +141,7 @@ export async function POST(request: Request) {
           attendee: { email: lead.email, name: lead.name },
         });
         calendarEventId = booking.eventId;
-        booked = { when, whenShort, durationMin, url: booking.meetUrl, calendar: "google" };
-        // Google's own invitation already puts the event in the visitor's calendar: no .ics needed.
+        booked = meetingFor(booking.meetUrl);
       } catch (error) {
         if (error instanceof CalendarError && error.kind === "busy") {
           return json({ ok: false, error: "slot_unavailable" }, 409);
@@ -136,21 +150,7 @@ export async function POST(request: Request) {
         return json({ ok: false, error: "calendar_failed" }, 502);
       }
     } else {
-      const url = meetingUrl();
-      booked = { when, whenShort, durationMin, url, calendar: "ics" };
-      const ics = buildIcs({
-        uid: `${randomUUID()}@isngs.com`,
-        start,
-        durationMin,
-        summary: "MS Dashboard call with iSN",
-        description: `Your MS Dashboard call with the iSN team.\nJoin: ${url}`,
-        url,
-        organizer: { name: config.fromName, email: config.fromEmail ?? "no-reply@example.com" },
-        attendee: { name: lead.name, email: lead.email },
-      });
-      attachments = [
-        { content: Buffer.from(ics, "utf8").toString("base64"), filename: "ms-dashboard-meeting.ics", type: "text/calendar; method=REQUEST" },
-      ];
+      booked = meetingFor(meetingUrl());
     }
   }
 
@@ -158,16 +158,16 @@ export async function POST(request: Request) {
 
   // ---- deliver -------------------------------------------------------------
   if (!emailReady) {
-    // Local development without a SendGrid key: write the email to disk so it can be inspected.
-    await writeDevOutbox(confirmation, attachments);
-    console.warn("[lead] SendGrid is not configured. Dev only: wrote the email to .dev-outbox/ instead of sending it.");
+    // Local development without Google mail credentials: write the email to disk so it can be inspected.
+    await writeDevOutbox(confirmation);
+    console.warn("[lead] Gmail sending is not configured. Dev only: wrote the email to .dev-outbox/ instead of sending it.");
     return json({ ok: true, delivered: false, booked: Boolean(booked) });
   }
 
   try {
-    await sendMail(config, { to: { email: lead.email, name: lead.name }, ...confirmation, attachments });
+    await sendMail(config, { to: { email: lead.email, name: lead.name }, cc: config.cc, ...confirmation });
   } catch (error) {
-    // The error text comes from SendGrid and never contains the visitor's details.
+    // The error text comes from Google and never contains the visitor's details.
     console.error("[lead] confirmation email failed:", error instanceof Error ? error.message : error);
     await undoBooking(google, calendarEventId);
     return json({ ok: false, error: "email_failed" }, 502);
@@ -218,14 +218,9 @@ function meetingUrl(): string {
   return `https://meet.jit.si/iSN-MSDashboard-${randomBytes(6).toString("hex")}`;
 }
 
-async function writeDevOutbox(email: { subject: string; text: string; html: string }, attachments?: Attachment[]) {
+async function writeDevOutbox(email: { subject: string; text: string; html: string }) {
   const dir = path.join(process.cwd(), ".dev-outbox");
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, "latest-email.html"), email.html, "utf8");
   await writeFile(path.join(dir, "latest-email.txt"), `Subject: ${email.subject}\n\n${email.text}\n`, "utf8");
-  // drop the invite from a previous booking so the outbox always matches the latest email
-  await rm(path.join(dir, "ms-dashboard-meeting.ics"), { force: true });
-  for (const a of attachments ?? []) {
-    await writeFile(path.join(dir, a.filename), Buffer.from(a.content, "base64"));
-  }
 }

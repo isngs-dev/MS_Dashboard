@@ -17,8 +17,8 @@ export type BookedMeeting = {
   whenShort: string;
   durationMin: number;
   url: string;
-  /** how the visitor gets the calendar entry: an .ics attached to this email, or Google's own invitation */
-  calendar: "ics" | "google";
+  /** "Add to Google Calendar" link (the email has no attachment) */
+  calendarUrl: string;
 };
 
 export type Rendered = { subject: string; text: string; html: string };
@@ -85,11 +85,6 @@ const firstName = (name: string) => name.trim().split(/\s+/)[0] || "there";
 
 const REASON = "You're getting this one-time email because you contacted us through the MS Dashboard website. Reply to this email and a person on the iSN team will answer.";
 
-const calendarLine = (meeting: BookedMeeting) =>
-  meeting.calendar === "ics"
-    ? "A calendar invite is attached to this email."
-    : "Google Calendar will also send you an invitation for this call.";
-
 /** The email the visitor gets: a meeting confirmation with the link, or a plain confirmation. */
 export function buildConfirmationEmail(lead: LeadPayload, meeting?: BookedMeeting): Rendered {
   const hi = escapeHtml(firstName(lead.name));
@@ -117,7 +112,7 @@ export function buildConfirmationEmail(lead: LeadPayload, meeting?: BookedMeetin
           <a href="${escapeHtml(meeting.url)}" style="display:inline-block;padding:13px 26px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;">Join the meeting</a>
         </td></tr></table>`,
         p(`The button not working? Copy this link into your browser:<br><a href="${escapeHtml(meeting.url)}" style="color:${C.blue};word-break:break-all;">${escapeHtml(meeting.url)}</a>`),
-        p(`${escapeHtml(calendarLine(meeting))} Need a different time? Just reply to this email.`),
+        p(`<a href="${escapeHtml(meeting.calendarUrl)}" style="color:${C.blue};font-weight:700;">Add to Google Calendar</a><br>Need a different time? Just reply to this email.`),
         `<div style="margin-top:8px;">${label("Details you shared")}</div>`,
         detailsBlock(lead),
       ].join(""),
@@ -132,7 +127,8 @@ export function buildConfirmationEmail(lead: LeadPayload, meeting?: BookedMeetin
       "Where: Online video call",
       `Meeting link: ${meeting.url}`,
       "",
-      `${calendarLine(meeting)} Need a different time? Just reply to this email.`,
+      `Add to Google Calendar: ${meeting.calendarUrl}`,
+      "Need a different time? Just reply to this email.",
       "",
       "Details you shared:",
       `Name: ${lead.name}`,

@@ -83,53 +83,59 @@ Flow: the visitor fills the contact form and presses the submit button -> a **"S
 (`src/components/form/ScheduleModal.tsx`) with a date and time picker and a **"No, thanks, just email me"** button.
 Nothing is sent until one of the two is chosen.
 
-| Visitor chooses | Email sent through SendGrid |
+| Visitor chooses | Email sent through the Gmail API |
 | --- | --- |
-| a date + time, "Book my meeting" | confirmation with the **meeting link**, the booked time in their time zone, and a calendar invite (`.ics`) attached |
+| a date + time, "Book my meeting" | confirmation with the **meeting link**, the booked time in their time zone, and an "Add to Google Calendar" link (emails never carry attachments) |
 | "No, thanks, just email me" | a normal confirmation email |
 
 Code: the browser validates (`src/lib/validation.ts`) and posts to **`/api/lead`** (`src/app/api/lead/route.ts`), which re-validates,
-builds the email (`src/lib/email/templates.ts`) and sends it with the SendGrid v3 API (`src/lib/email/sendgrid.ts`, plain `fetch`, no SDK).
+builds the email (`src/lib/email/templates.ts`) and sends it with the **Gmail API** (`src/lib/email/gmail.ts`, plain `fetch` and hand-built MIME, no SDK).
+The mail leaves from the Google account that signed in, so it is signed by Google for your own domain and shows up in that mailbox's Sent folder.
 Copy of the pop-up lives in `src/content/copy.ts`.
 
 ### Set it up
 
-1. In SendGrid create an API key with **Mail Send** permission, and verify the sender address (or authenticate the domain) you will send from.
-2. Copy `.env.example` to `.env.local` and fill in at least `SENDGRID_API_KEY` and `SENDGRID_FROM_EMAIL` (must be the verified sender). Restart the server.
+1. Set up the Google credentials below ("Google Calendar, Google Meet and Gmail"). The same sign-in is used for the calendar and for sending mail.
+2. Copy `.env.example` to `.env.local` and set `MAIL_FROM_EMAIL` (the account that signed in, or one of its "Send mail as" aliases: any other address is silently
+   replaced by the account's own), plus optionally `MAIL_FROM_NAME`, `MAIL_REPLY_TO` and `MAIL_CC`. Restart the server.
 3. Optional: `LEAD_NOTIFICATION_TO` also emails your team about every lead and booking.
 4. The meeting link: leave `MEETING_URL` empty to give every booking its own private Jitsi Meet room, or set it to a fixed Google Meet / Teams / Zoom link.
    (`meet.jit.si` may ask the first person who joins to sign in; a fixed link of your own avoids that.)
 
-Without the SendGrid variables: in development the emails are written to `.dev-outbox/` (open `latest-email.html`, `latest-email.txt` and the `.ics`)
+Without the Google credentials and `MAIL_FROM_EMAIL`: in development the emails are written to `.dev-outbox/` (open `latest-email.html` and `latest-email.txt`)
 so the whole flow can be tried locally; in production the endpoint answers 503 so a lead is never silently lost.
+Gmail limits: about 2,000 messages a day for a Google Workspace account (500 for a free Gmail one), plenty for a lead form.
 
 Safeguards in the endpoint: server-side validation of the lead and the slot (30 minutes to 90 days ahead), HTML-escaping of everything the visitor typed,
 a hidden honeypot field, and rate limits (per IP and per address). The rate limiter is in-memory, fine for one server; use a shared store (Redis) if you run several.
 
 The endpoint needs a Node server. On a static export (no server) it will not exist.
 
-### Google Calendar and Google Meet (optional, recommended)
+### Google Calendar, Google Meet and Gmail
 
+The Google credentials do two jobs: they send the confirmation emails (Gmail API) and, when a call is booked, create the calendar event.
 With Google credentials configured, a booking is created as a real **Google Calendar event with a Google Meet link** on your calendar
 (`src/lib/google/calendar.ts`, plain `fetch` + `node:crypto`, no SDK):
 
 1. the slot is checked against your calendar (free/busy); if it is taken the pop-up says "That time isn't available" and the visitor picks another time (HTTP 409);
-2. the event is created with the visitor as an attendee and a Meet link requested; Google emails the visitor its own invite (`GOOGLE_SEND_UPDATES`, default `all`);
-3. our SendGrid confirmation email carries the same Meet link (no `.ics`, Google's invite replaces it);
+2. the event is created with the visitor as an attendee and a Meet link requested; by default Google sends no email of its own (`GOOGLE_SEND_UPDATES=none`),
+   because Google's invitation comes in the calendar owner's name and looks like a plain text mail. Set it to `all` if you want Google's invitation too;
+3. our branded confirmation email carries the same Meet link and an "Add to Google Calendar" link (no attachment);
 4. if the confirmation email then fails, the event is deleted again so no half-booking is left behind.
 
-Without Google credentials the site falls back to the Jitsi / `MEETING_URL` link plus `.ics` described above. Visitors who choose "No, thanks, just email me" never touch Google.
+Without Google credentials the site falls back to the Jitsi / `MEETING_URL` link described above. Visitors who choose "No, thanks, just email me" never touch Google.
 
 **Option A, OAuth refresh token (any Google account, simplest)**
 
-1. Google Cloud Console: create or pick a project, enable **Google Calendar API**.
+1. Google Cloud Console: create or pick a project, enable **Google Calendar API** and **Gmail API**.
 2. OAuth consent screen: choose **Internal** (Google Workspace) or press **Publish app** ("In production"). A project left in "Testing" makes the refresh token expire after 7 days.
 3. Credentials, Create credentials, OAuth client ID, application type **Desktop app**. Put the client id and secret in `.env.local` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
-4. Run `npm run google:auth`, sign in with the Google account whose calendar should receive the bookings and approve access. The script saves `GOOGLE_REFRESH_TOKEN` into `.env.local`.
+4. Run `npm run google:auth`, sign in with the Google account whose calendar should receive the bookings and approve access (calendar and "send email on your behalf"). The script saves `GOOGLE_REFRESH_TOKEN` into `.env.local`.
+   A token created before Gmail was added cannot send mail: run the command again.
 5. Restart the server. Set `GOOGLE_CALENDAR_ID` if the bookings should go to a calendar other than the account's primary one.
 
 **Option B, service account (Google Workspace only)**: create a service account, enable domain-wide delegation for the scope
-`https://www.googleapis.com/auth/calendar.events` (and `calendar.freebusy`) in the Admin console, then set `GOOGLE_SERVICE_ACCOUNT_EMAIL`,
+`https://www.googleapis.com/auth/calendar.events` (and `calendar.freebusy`, plus `https://www.googleapis.com/auth/gmail.send` to send the emails) in the Admin console, then set `GOOGLE_SERVICE_ACCOUNT_EMAIL`,
 `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` (keep the `\n` escapes on one line) and `GOOGLE_IMPERSONATE_USER` (the mailbox that owns the calendar).
 A plain service account cannot create Meet links or invite people on its own, which is why the impersonation is required.
 
@@ -153,7 +159,7 @@ could both pass the free/busy check; the second one would still see the conflict
 
 ## Deploy on Render
 
-`render.yaml` is a Render Blueprint: Dashboard, New +, **Blueprint**, pick this repo. Render asks for the secrets (SendGrid and Google values, see `.env.example`);
+`render.yaml` is a Render Blueprint: Dashboard, New +, **Blueprint**, pick this repo. Render asks for the secrets (Google and mail values, see `.env.example`);
 everything else is pre-filled. It builds with `npm ci --include=dev && npm run build` and starts with `npm start`, which listens on the `PORT` Render provides (on 3107 when run locally).
 If you create the service by hand instead, use those same two commands. After the first deploy:
 

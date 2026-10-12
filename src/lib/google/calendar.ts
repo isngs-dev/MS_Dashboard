@@ -25,6 +25,10 @@ const SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/calendar.freebusy",
 ];
+const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+
+/** Gmail API host (same dev-only override as above so the flow can be tested against a local mock). */
+export const GMAIL_API_BASE = (!IS_PROD && process.env.GOOGLE_API_BASE) || "https://gmail.googleapis.com";
 
 type Auth =
   | { kind: "oauth"; clientId: string; clientSecret: string; refreshToken: string }
@@ -33,7 +37,11 @@ type Auth =
 export type GoogleConfig = {
   auth: Auth;
   calendarId: string;
-  /** who Google emails about the event: "all" = the visitor gets Google's own invitation too */
+  /**
+   * who Google emails about the event. Default "none": Google's invitation is sent in the calendar
+   * owner's own name, so the visitor only gets our branded email (with an "Add to Google Calendar" link).
+   * "all" = the visitor also gets Google's own invitation.
+   */
   sendUpdates: "all" | "externalOnly" | "none";
   /** extra people added to every booking (e.g. the sales team), so it shows in their calendars */
   extraAttendees: string[];
@@ -74,7 +82,7 @@ export function googleConfig(): GoogleConfig | null {
   return {
     auth,
     calendarId: v("GOOGLE_CALENDAR_ID") ?? "primary",
-    sendUpdates: updates === "none" || updates === "externalOnly" ? updates : "all",
+    sendUpdates: updates === "all" || updates === "externalOnly" ? updates : "none",
     extraAttendees: (v("GOOGLE_EXTRA_ATTENDEES") ?? "")
       .split(",")
       .map((e) => e.trim())
@@ -86,21 +94,27 @@ export function googleConfig(): GoogleConfig | null {
 /* Authentication                                                            */
 /* ------------------------------------------------------------------------ */
 
-let cached: { token: string; expiresAt: number } | null = null;
+// One token per purpose: with a service account each purpose asks Google for its own scope, so a
+// missing Gmail permission can never break calendar bookings. An OAuth refresh token returns every
+// scope the account agreed to, so there one token covers both.
+const cache = new Map<string, { token: string; expiresAt: number }>();
 
 const b64url = (input: string | Buffer) => Buffer.from(input).toString("base64url");
 
-function signServiceAccountJwt(auth: Extract<Auth, { kind: "service-account" }>): string {
+function signServiceAccountJwt(auth: Extract<Auth, { kind: "service-account" }>, scopes: string[]): string {
   const now = Math.floor(Date.now() / 1000);
   const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const claims = b64url(
-    JSON.stringify({ iss: auth.email, sub: auth.subject, scope: SCOPES.join(" "), aud: TOKEN_URL, iat: now, exp: now + 3600 }),
+    JSON.stringify({ iss: auth.email, sub: auth.subject, scope: scopes.join(" "), aud: TOKEN_URL, iat: now, exp: now + 3600 }),
   );
   const signature = createSign("RSA-SHA256").update(`${header}.${claims}`).sign(auth.privateKey);
   return `${header}.${claims}.${b64url(signature)}`;
 }
 
-async function accessToken(cfg: GoogleConfig): Promise<string> {
+/** Access token for the calendar (default) or for sending mail through the Gmail API. */
+export async function googleAccessToken(cfg: GoogleConfig, purpose: "calendar" | "gmail" = "calendar"): Promise<string> {
+  const cacheKey = cfg.auth.kind === "oauth" ? "oauth" : purpose;
+  const cached = cache.get(cacheKey);
   if (cached && cached.expiresAt - 60_000 > Date.now()) return cached.token;
 
   const form = new URLSearchParams();
@@ -111,7 +125,7 @@ async function accessToken(cfg: GoogleConfig): Promise<string> {
     form.set("refresh_token", cfg.auth.refreshToken);
   } else {
     form.set("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer");
-    form.set("assertion", signServiceAccountJwt(cfg.auth));
+    form.set("assertion", signServiceAccountJwt(cfg.auth, purpose === "gmail" ? [GMAIL_SCOPE] : SCOPES));
   }
 
   const response = await fetch(TOKEN_URL, {
@@ -132,8 +146,13 @@ async function accessToken(cfg: GoogleConfig): Promise<string> {
     const reason = [data.error, data.error_description].filter(Boolean).join(": ") || String(response.status);
     throw new CalendarError(`Google token request failed (${reason})`, "auth");
   }
-  cached = { token: data.access_token, expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000 };
-  return cached.token;
+  cache.set(cacheKey, { token: data.access_token, expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000 });
+  return data.access_token;
+}
+
+/** Forget cached tokens (after Google answered 401: revoked or expired early). */
+export function forgetGoogleTokens(): void {
+  cache.clear();
 }
 
 /* ------------------------------------------------------------------------ */
@@ -145,7 +164,7 @@ async function calendarApi<T>(
   path: string,
   options: { method?: string; query?: Record<string, string>; body?: unknown } = {},
 ): Promise<T> {
-  const token = await accessToken(cfg);
+  const token = await googleAccessToken(cfg);
   const url = new URL(`${API_BASE}/calendar/v3${path}`);
   for (const [k, val] of Object.entries(options.query ?? {})) url.searchParams.set(k, val);
 
@@ -159,7 +178,7 @@ async function calendarApi<T>(
 
   const data = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
   if (!response.ok) {
-    if (response.status === 401) cached = null; // token revoked or expired early
+    if (response.status === 401) forgetGoogleTokens(); // token revoked or expired early
     const message = `Google Calendar API ${response.status}: ${data.error?.message ?? "request failed"}`;
     throw new CalendarError(message, response.status === 401 ? "auth" : "api");
   }

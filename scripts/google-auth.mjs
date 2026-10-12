@@ -1,7 +1,7 @@
 /**
  * One-time helper: signs in to Google and saves a refresh token into .env.local,
  * so the website can create Google Calendar events (with Google Meet links) on that
- * account's calendar.
+ * account's calendar and send its confirmation emails from that account (Gmail API).
  *
  * Before running it you need GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (an OAuth client
  * of type "Desktop app") in .env.local. See "Google Calendar" in the README.
@@ -21,6 +21,8 @@ const envPath = path.join(root, ".env.local");
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/calendar.freebusy",
+  // lets the website send the confirmation emails from this account (Gmail API)
+  "https://www.googleapis.com/auth/gmail.send",
 ];
 const PORT = 53682;
 const REDIRECT = `http://127.0.0.1:${PORT}`;
@@ -54,6 +56,7 @@ if (!clientId || !clientSecret) {
       "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are missing from .env.local.",
       "",
       "1. Google Cloud Console > APIs & Services > enable \"Google Calendar API\"",
+      "1b. Also enable \"Gmail API\" (it sends the emails)",
       "2. OAuth consent screen: choose \"Internal\" (Google Workspace) or publish the app (\"In production\")",
       "3. Credentials > Create credentials > OAuth client ID > Application type: Desktop app",
       "4. Put the client ID and secret in .env.local, then run this again.",

@@ -19,14 +19,14 @@ export class SubmitError extends Error {
 }
 
 export type SubmitResult = {
-  /** false in local dev without SendGrid keys (the email is written to .dev-outbox instead) */
+  /** false in local dev without Google mail credentials (the email is written to .dev-outbox instead) */
   delivered: boolean;
   booked: boolean;
 };
 
 /**
  * Sends the lead to /api/lead (src/app/api/lead/route.ts), which emails the
- * confirmation through SendGrid. Resolves on success, throws on any failure so
+ * confirmation through the Gmail API. Resolves on success, throws on any failure so
  * the UI can show its error state.
  */
 export async function submitLead(payload: LeadPayload, options: Options = {}): Promise<SubmitResult> {
