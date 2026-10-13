@@ -141,6 +141,21 @@ A plain service account cannot create Meet links or invite people on its own, wh
 
 Other variables: `GOOGLE_EXTRA_ATTENDEES` (comma separated teammates added to every meeting), `MEETING_DURATION_MIN` (15 to 120, default 30). All are listed in `.env.example`.
 
+### Reminder emails ("your call is tomorrow")
+
+About 24 hours before a booked call the visitor gets a short reminder with the time, the Meet link and an "Add to Google Calendar" link
+(`src/lib/reminders.ts`, template `buildReminderEmail`).
+
+- **No database:** every call booked on the website is a Google Calendar event that also stores the visitor's name and email. A job looks at the calls starting in
+  the next 24 hours, emails the visitor once and marks the event (`reminderSent`) so it is never repeated.
+- **Who runs the job:** set `REMINDERS_ENABLED=true` and the server checks every `REMINDER_CHECK_MINUTES` (default 10; `src/instrumentation.ts`). It needs a server that is
+  always on (a Render Starter plan, not the free one that sleeps). Optionally an outside scheduler can call `GET/POST /api/reminders` with `Authorization: Bearer <CRON_SECRET>`
+  (`?dryRun=1` only counts what is due). Both can run together; the flag prevents a second email.
+- **Not on your own computer:** keep `REMINDERS_ENABLED` off locally, otherwise a local server with the real credentials would email real visitors.
+- **Rules:** a call booked less than 25 hours ahead gets no reminder (the confirmation arrived a moment ago), nothing is sent in the last hour before a call, and a call
+  that was cancelled or deleted from the calendar gets none. Calls booked before this feature existed are covered too (the visitor is read from the guest list).
+  The reminder says "tomorrow", or "today" if it goes out late on the day itself.
+
 ### Which times can be picked
 
 After choosing a date the visitor sees a grid of start times (every 30 minutes). Times that are **already booked** on your Google Calendar, or already past, are

@@ -178,6 +178,58 @@ export function buildConfirmationEmail(lead: LeadPayload, meeting?: BookedMeetin
   return { subject, text, html };
 }
 
+const REMINDER_REASON =
+  "You're getting this one-time reminder because you booked a call through the MS Dashboard website. Reply to this email if you need to change the time.";
+
+/** The reminder sent the day before a booked call ("today" if it is sent late, on the day itself). */
+export function buildReminderEmail(visitor: { name: string }, meeting: BookedMeeting, day: "tomorrow" | "today"): Rendered {
+  const hi = escapeHtml(firstName(visitor.name));
+  const subject = `Reminder: your MS Dashboard call is ${day}, ${meeting.whenShort}`;
+  const intro = `Hi ${firstName(visitor.name)}, a quick reminder that you have a call with the iSN team ${day}.`;
+
+  const html = layout({
+    preheader: `Your call with the iSN team is ${day}, ${meeting.whenShort}. The meeting link is inside.`,
+    badge: "Reminder",
+    heading: `Your call is ${day}`,
+    reason: REMINDER_REASON,
+    body: [
+      p(`Hi ${hi}, a quick reminder that you have a call with the iSN team ${day}.`),
+      `<table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;margin:6px 0 18px;background:${C.panel};border-radius:14px;">
+        <tr><td style="padding:16px 18px;font-size:14px;line-height:1.6;color:${C.ink};">
+          ${label("When")}
+          <div style="font-size:16px;font-weight:700;margin-bottom:10px;">${escapeHtml(meeting.when)}</div>
+          ${label("Duration")}
+          <div style="font-weight:700;margin-bottom:10px;">${meeting.durationMin} minutes</div>
+          ${label("Where")}
+          <div style="font-weight:700;">Online video call</div>
+        </td></tr>
+      </table>`,
+      `<table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 14px;"><tr><td style="background:${C.cta};border-radius:999px;">
+        <a href="${escapeHtml(meeting.url)}" style="display:inline-block;padding:13px 26px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;">Join the meeting</a>
+      </td></tr></table>`,
+      p(`The button not working? Copy this link into your browser:<br><a href="${escapeHtml(meeting.url)}" style="color:${C.blue};word-break:break-all;">${escapeHtml(meeting.url)}</a>`),
+      p(`<a href="${escapeHtml(meeting.calendarUrl)}" style="color:${C.blue};font-weight:700;">Add to Google Calendar</a><br>Need a different time? Just reply to this email.`),
+    ].join(""),
+  });
+
+  const text = [
+    intro,
+    "",
+    `When: ${meeting.when}`,
+    `Duration: ${meeting.durationMin} minutes`,
+    "Where: Online video call",
+    `Meeting link: ${meeting.url}`,
+    "",
+    `Add to Google Calendar: ${meeting.calendarUrl}`,
+    "Need a different time? Just reply to this email.",
+    "",
+    "--",
+    REMINDER_REASON,
+    `iSN | ${TAGLINE}`,
+  ].join("\n");
+  return { subject, text, html };
+}
+
 /** Optional heads-up for the iSN team (only sent when LEAD_NOTIFICATION_TO is configured). */
 export function buildTeamNotification(lead: LeadPayload, meeting?: BookedMeeting): { subject: string; text: string } {
   const subject = meeting

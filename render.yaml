@@ -41,6 +41,13 @@ services:
       - key: GOOGLE_CALENDAR_ID
         value: primary
 
+      # "Your call is tomorrow" reminder emails. The server checks every few minutes (needs a plan that
+      # does not sleep, like Starter). CRON_SECRET is only for calling /api/reminders from an outside scheduler.
+      - key: REMINDERS_ENABLED
+        value: "true"
+      - key: CRON_SECRET
+        sync: false
+
       # When the team takes calls, in Eastern Time (the pop-up always shows Eastern Time).
       - key: MEETING_HOURS
         value: 09:00-18:00

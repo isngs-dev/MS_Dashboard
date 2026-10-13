@@ -185,11 +185,20 @@ async function calendarApi<T>(
   return data as T;
 }
 
+/** Marks the events this website created (so a reminder job never touches anyone else's meetings). */
+const WEBSITE_SOURCE = "ms-dashboard-website";
+
 type CalendarEvent = {
   id: string;
+  status?: string;
+  created?: string;
   htmlLink?: string;
   hangoutLink?: string;
   conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] };
+  start?: { dateTime?: string; timeZone?: string };
+  end?: { dateTime?: string };
+  attendees?: { email?: string; displayName?: string }[];
+  extendedProperties?: { private?: Record<string, string | null> };
 };
 
 const meetUrlOf = (event: CalendarEvent): string | undefined =>
@@ -280,7 +289,14 @@ export async function bookMeeting(cfg: GoogleConfig, input: BookingInput): Promi
       guestsCanModify: false,
       guestsCanInviteOthers: false,
       reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 15 }] },
-      extendedProperties: { private: { source: "ms-dashboard-website" } },
+      // Kept on the event so the reminder job can find the visitor again without a database.
+      extendedProperties: {
+        private: {
+          source: WEBSITE_SOURCE,
+          visitorEmail: input.attendee.email,
+          visitorName: input.attendee.name.slice(0, 100),
+        },
+      },
     },
   });
 
@@ -299,6 +315,71 @@ export async function bookMeeting(cfg: GoogleConfig, input: BookingInput): Promi
     throw new CalendarError("Google did not return a Meet link for the event", "api");
   }
   return { eventId: created.id, meetUrl, eventUrl: event.htmlLink };
+}
+
+export type WebsiteBooking = {
+  id: string;
+  start: Date;
+  end: Date;
+  /** zone the booking was made in (shown in emails) */
+  timeZone: string;
+  /** when the booking was made; null if Google did not say */
+  created: Date | null;
+  visitor: { email: string; name: string } | null;
+  meetUrl: string | undefined;
+  /** a reminder email already went out (or is being sent right now) */
+  reminded: boolean;
+};
+
+/** The calls booked through this website that start between `from` and `to`, earliest first. */
+export async function listWebsiteBookings(cfg: GoogleConfig, from: Date, to: Date): Promise<WebsiteBooking[]> {
+  const data = await calendarApi<{ items?: CalendarEvent[] }>(cfg, `/calendars/${encodeURIComponent(cfg.calendarId)}/events`, {
+    query: {
+      timeMin: from.toISOString(),
+      timeMax: to.toISOString(),
+      singleEvents: "true",
+      orderBy: "startTime",
+      maxResults: "100",
+      privateExtendedProperty: `source=${WEBSITE_SOURCE}`,
+    },
+  });
+
+  const bookings: WebsiteBooking[] = [];
+  for (const event of data.items ?? []) {
+    if (event.status === "cancelled" || !event.start?.dateTime || !event.end?.dateTime) continue;
+    const props = event.extendedProperties?.private ?? {};
+    const first = event.attendees?.[0];
+    const email = props.visitorEmail || first?.email;
+    bookings.push({
+      id: event.id,
+      start: new Date(event.start.dateTime),
+      end: new Date(event.end.dateTime),
+      timeZone: event.start.timeZone ?? "UTC",
+      created: event.created ? new Date(event.created) : null,
+      visitor: email ? { email, name: props.visitorName || first?.displayName || "" } : null,
+      meetUrl: meetUrlOf(event),
+      reminded: Boolean(props.reminderSent),
+    });
+  }
+  return bookings;
+}
+
+/**
+ * Sets or clears the "reminder sent" flag on an event (no emails go out for this change).
+ * The other private properties are sent along unchanged so nothing gets lost.
+ */
+export async function setReminderFlag(cfg: GoogleConfig, eventId: string, sent: boolean): Promise<void> {
+  const path = `/calendars/${encodeURIComponent(cfg.calendarId)}/events/${encodeURIComponent(eventId)}`;
+  const current = await calendarApi<CalendarEvent>(cfg, path);
+  const props = { ...(current.extendedProperties?.private ?? {}) };
+  if (sent) props.reminderSent = new Date().toISOString();
+  else delete props.reminderSent;
+  await calendarApi<CalendarEvent>(cfg, path, {
+    method: "PATCH",
+    query: { sendUpdates: "none" },
+    // setting a property to null removes it
+    body: { extendedProperties: { private: sent ? props : { ...props, reminderSent: null } } },
+  });
 }
 
 /** Removes a booking again (used when the confirmation email could not be sent). */
