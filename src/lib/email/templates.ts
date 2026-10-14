@@ -42,7 +42,7 @@ const TAGLINE = "Built by iSN. Built for Mystery Shopping.";
 function layout(opts: { preheader: string; heading: string; badge: string; body: string; reason: string }): string {
   return `<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(opts.heading)}</title></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><style>:root{color-scheme:light only;}</style><title>${escapeHtml(opts.heading)}</title></head>
 <body style="margin:0;padding:0;background:${C.paper};">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(opts.preheader)}</div>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${C.paper};padding:32px 12px;">
