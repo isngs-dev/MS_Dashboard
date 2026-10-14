@@ -13,6 +13,7 @@ import { useReducedMotion } from "@/hooks/useQuality";
 import { submitLead, SubmitError } from "@/lib/submitLead";
 import {
   FIELD_ORDER,
+  formatUsPhone,
   validateField,
   validateLead,
   type LeadErrors,
@@ -68,7 +69,8 @@ export default function Contact() {
       return next;
     });
 
-  const handleChange = (field: keyof LeadPayload, value: string) => {
+  const handleChange = (field: keyof LeadPayload, raw: string) => {
+    const value = field === "phone" ? formatUsPhone(raw) : raw;
     setValues((v) => ({ ...v, [field]: value }));
     // once a field has been visited, re-validate live as the user types
     if (touched[field]) setError(field, validateField(field, value));

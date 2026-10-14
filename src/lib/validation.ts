@@ -30,8 +30,22 @@ export const MIN_LEAD_MINUTES = 30;
 export const MAX_DAYS_AHEAD = 90;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-// digits plus the usual separators; 7-15 digits covers local through E.164 numbers
+// digits plus the usual separators, then checked as a US (NANP) number
 const PHONE_CHARS_RE = /^\+?[\d\s().-]+$/;
+
+/** The visitor's digits as a US national number: no country code, at most 10 digits. */
+const usDigits = (raw: string) => raw.replace(/\D/g, "").replace(/^1/, "").slice(0, 10);
+
+/** "(555) 123-4567" as far as the digits go; used while typing. Separators only appear once a digit follows them. */
+export function formatUsPhone(raw: string): string {
+  const d = usDigits(raw);
+  if (d.length <= 3) return d && `(${d}`;
+  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+}
+
+/** NANP: 10 digits, area code and exchange both start with 2-9. */
+const isUsPhone = (raw: string) => PHONE_CHARS_RE.test(raw) && /^[2-9]\d{2}[2-9]\d{6}$/.test(usDigits(raw));
 
 const MAX_LEN = { name: 100, company: 150, phone: 30, email: 254 } as const;
 
@@ -50,11 +64,7 @@ export function validateField(field: keyof LeadPayload, raw: string): string | u
       return undefined;
     case "phone": {
       if (!value) return "Please enter your phone number.";
-      const digits = value.replace(/\D/g, "");
-      if (!PHONE_CHARS_RE.test(value) || digits.length < 7 || digits.length > 15) {
-        return "Enter a valid phone number (7 to 15 digits).";
-      }
-      return undefined;
+      return isUsPhone(value) ? undefined : "Enter a valid US phone number, like (555) 234-5678.";
     }
     case "email":
       if (!value) return "Please enter your email address.";
@@ -76,7 +86,7 @@ export function normalizeLead(values: LeadPayload): LeadPayload {
   return {
     name: values.name.trim(),
     company: values.company.trim(),
-    phone: values.phone.trim(),
+    phone: isUsPhone(values.phone.trim()) ? formatUsPhone(values.phone) : values.phone.trim(),
     email: values.email.trim().toLowerCase(),
   };
 }
