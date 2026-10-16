@@ -10,4 +10,3 @@ import dynamic from "next/dynamic";
 export const HeroScene = dynamic(() => import("./HeroScene"), { ssr: false, loading: () => null });
 export const ChaosScene = dynamic(() => import("./ChaosScene"), { ssr: false, loading: () => null });
 export const AboutScene = dynamic(() => import("./AboutScene"), { ssr: false, loading: () => null });
-export const FormScene = dynamic(() => import("./FormScene"), { ssr: false, loading: () => null });

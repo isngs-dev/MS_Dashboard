@@ -3,13 +3,9 @@
 import { useRef, useState, type FormEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import RevealHeading from "@/components/ui/RevealHeading";
-import MagneticWrap from "@/components/ui/MagneticWrap";
-import TiltCard from "@/components/features/TiltCard";
 import FloatingField from "@/components/form/FloatingField";
 import ScheduleModal from "@/components/form/ScheduleModal";
 import SuccessState from "@/components/form/SuccessState";
-import { FormScene } from "@/components/three/lazy";
-import { useReducedMotion } from "@/hooks/useQuality";
 import { submitLead, SubmitError } from "@/lib/submitLead";
 import {
   FIELD_ORDER,
@@ -46,7 +42,6 @@ function describeMeeting(m: MeetingRequest): string {
 }
 
 export default function Contact() {
-  const reduced = useReducedMotion();
   const formRef = useRef<HTMLFormElement>(null);
   const [values, setValues] = useState<LeadPayload>(EMPTY);
   const [errors, setErrors] = useState<LeadErrors>({});
@@ -134,10 +129,6 @@ export default function Contact() {
       aria-labelledby="build-title"
       className="relative overflow-hidden px-5 py-28 outline-none sm:px-8 sm:py-40"
     >
-      {/* drifting particles + ghosted 3D dashboard silhouette */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.5] [mask-image:radial-gradient(ellipse_85%_80%_at_60%_50%,#000_35%,transparent_88%)]">
-        <FormScene />
-      </div>
       <div aria-hidden className="pointer-events-none absolute left-1/2 top-1/2 h-[70vw] max-h-[900px] w-[70vw] max-w-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(224_178_142/0.35),transparent_70%)]" />
 
       <div className="relative mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[1.02fr_1fr] lg:gap-20">
@@ -152,14 +143,12 @@ export default function Contact() {
           <p className="mt-7 max-w-xl text-base leading-relaxed text-muted sm:text-lg">{FORM.body}</p>
         </div>
 
-        <motion.div
-          animate={reduced ? undefined : { y: [0, -9, 0] }}
-          transition={{ duration: 7.5, repeat: Infinity, ease: "easeInOut" }}
-          className="relative"
-        >
+        <div className="relative">
           <div aria-hidden className="absolute -inset-4 rounded-[2.4rem] bg-gradient-to-br from-blue/15 via-sky/10 to-clay/25 blur-3xl" />
-          <TiltCard border="live" max={4.5} className="rounded-[2rem]" glassClassName="glass-blur">
-            <div className="relative z-10 p-6 sm:p-9" style={{ transform: "translateZ(28px)" }}>
+          {/* static card: no tilt, float or depth, so the fields stay still while typing */}
+          <div className="gborder gborder-live group relative rounded-[2rem]">
+            <div className="glass glass-blur absolute inset-0 rounded-[inherit]" />
+            <div className="relative z-10 p-6 sm:p-9">
               <AnimatePresence mode="wait">
                 {status === "success" ? (
                   <SuccessState key="success" email={values.email.trim()} booked={booked} />
@@ -197,18 +186,16 @@ export default function Contact() {
                     </div>
 
                     <div className="mt-3">
-                      <MagneticWrap block strength={0.18}>
-                        <button type="submit" className="btn-cta btn-pulse w-full px-8 py-4 text-base sm:text-lg">
-                          <span>{FORM.submit}</span>
-                        </button>
-                      </MagneticWrap>
+                      <button type="submit" className="btn-cta btn-pulse w-full px-8 py-4 text-base sm:text-lg">
+                        <span>{FORM.submit}</span>
+                      </button>
                     </div>
                   </motion.form>
                 )}
               </AnimatePresence>
             </div>
-          </TiltCard>
-        </motion.div>
+          </div>
+        </div>
       </div>
 
       <ScheduleModal
