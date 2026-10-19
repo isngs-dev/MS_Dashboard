@@ -9,7 +9,6 @@ import { useHeroState } from "./heroState";
 import { barFragment, barVertex } from "./shaders";
 import {
   BARS,
-  DONUT,
   KPIS,
   LINE_POINTS,
   PANELS,
@@ -461,51 +460,6 @@ function LineGraph({ getReveal }: { getReveal: () => number }) {
 }
 
 /* ------------------------------------------------------------------------ */
-/* Rotating donut                                                            */
-/* ------------------------------------------------------------------------ */
-function Donut({ getReveal }: { getReveal: () => number }) {
-  const state = useHeroState();
-  const group = useRef<THREE.Group>(null);
-  const ring = useRef<THREE.Group>(null);
-
-  const arcs = useMemo(() => {
-    const gap = 0.05;
-    const full = Math.PI * 2;
-    return DONUT.segments.map((seg_, i) => {
-      const before = DONUT.segments.slice(0, i).reduce((sum, x) => sum + x.share, 0);
-      return { arc: seg_.share * full - gap, rot: before * full + gap / 2, color: seg_.color };
-    });
-  }, []);
-
-  useFrame(() => {
-    const s = state.current;
-    if (group.current) {
-      const grow = easeOutBack(seg(s.p, 0.78, 1));
-      group.current.scale.setScalar(Math.max(0.001, grow));
-      group.current.rotation.x = s.py * 0.25;
-      group.current.rotation.y = -s.px * 0.25;
-    }
-    if (ring.current) ring.current.rotation.z = s.still ? 0.6 : -s.t * 0.4;
-  });
-
-  return (
-    <group position={[DONUT.x, DONUT.y, DONUT.z]}>
-      <group ref={group}>
-        <group ref={ring}>
-          {arcs.map((a, i) => (
-            <mesh key={i} rotation={[0, 0, a.rot]}>
-              <torusGeometry args={[DONUT.radius, DONUT.tube, 14, 48, a.arc]} />
-              <meshStandardMaterial color={a.color} emissive={a.color} emissiveIntensity={0.16} roughness={0.35} metalness={0.25} />
-            </mesh>
-          ))}
-        </group>
-      </group>
-      <CountText value={86} decimals={0} suffix="%" position={[0, 0, 0.12]} size={0.26} start={0.8} getReveal={getReveal} anchorX="center" />
-    </group>
-  );
-}
-
-/* ------------------------------------------------------------------------ */
 /* Header / sidebar decoration                                               */
 /* ------------------------------------------------------------------------ */
 function HeaderDecor({ getReveal }: { getReveal: () => number }) {
@@ -587,12 +541,6 @@ export default function DashboardModel({ detail = true }: { detail?: boolean }) 
                 <>
                   <LineGraph getReveal={getReveal} />
                   <Label text="Score trend" position={[spec.x - spec.w / 2 + 0.24, spec.y + spec.h / 2 - 0.25, spec.z + 0.03]} size={0.11} color="#6f5f50" getReveal={getReveal} />
-                </>
-              )}
-              {spec.id === "donut" && (
-                <>
-                  <Donut getReveal={getReveal} />
-                  <Label text="Coverage" position={[spec.x, spec.y + spec.h / 2 - 0.22, spec.z + 0.03]} size={0.1} color="#6f5f50" getReveal={getReveal} anchorX="center" />
                 </>
               )}
             </>

@@ -34,7 +34,6 @@ export const PANELS: PanelSpec[] = [
   { id: "kpi3", x: 2.6, y: 1.0, z: 0.7, w: 2.0, h: 0.95, r: 0.16, tintA: "#ffffff", tintB: "#dde7fa", border: "#9fb9ec", fill: 0.92, edge: 0.9, start: 0.65, end: 0.9 },
   { id: "bars", x: -1.2, y: -0.9, z: 0.85, w: 3.1, h: 2.4, r: 0.2, tintA: "#ffffff", tintB: "#f3eadf", border: "#d6c3ad", fill: 0.9, edge: 0.9, start: 0.68, end: 0.93 },
   { id: "line", x: 2.075, y: -0.45, z: 1.05, w: 3.05, h: 1.5, r: 0.2, tintA: "#ffffff", tintB: "#e9f0fc", border: "#a9c0ee", fill: 0.9, edge: 0.9, start: 0.72, end: 0.96 },
-  { id: "donut", x: 3.0, y: -2.0, z: 1.5, w: 1.9, h: 1.9, r: 0.22, tintA: "#fffdf9", tintB: "#f2e5d4", border: "#d9bda0", fill: 0.94, edge: 0.9, start: 0.76, end: 1.0 },
 ];
 
 export const panelById = (id: string) => PANELS.find((p) => p.id === id)!;
@@ -82,21 +81,6 @@ export const LINE_POINTS = (() => {
   return pts;
 })();
 
-/* ---- donut -------------------------------------------------------------- */
-export const DONUT = {
-  x: panelById("donut").x,
-  y: panelById("donut").y + 0.02,
-  z: panelById("donut").z + 0.1,
-  radius: 0.58,
-  tube: 0.12,
-  segments: [
-    { share: 0.38, color: "#2f66d4" },
-    { share: 0.27, color: "#6b97e8" },
-    { share: 0.2, color: "#cdb08f" },
-    { share: 0.15, color: "#b9694a" },
-  ],
-};
-
 /* ---- KPI cards ---------------------------------------------------------- */
 export const KPIS = [
   { panel: "kpi1", label: "TOTAL VISITS", value: 12840, decimals: 0, suffix: "" },
@@ -129,7 +113,7 @@ function samplePanelOutline(rand: () => number, p: PanelSpec): [number, number, 
 
 /**
  * Where each particle ends up. The mix favours the data-bearing parts of the
- * dashboard (bars, line, donut) so the assembly reads as "data becoming charts".
+ * dashboard (bars, line) so the assembly reads as "data becoming charts".
  */
 export function sampleDashboardTargets(count: number, seed = 7): Float32Array {
   const rand = mulberry32(seed);
@@ -144,13 +128,9 @@ export function sampleDashboardTargets(count: number, seed = 7): Float32Array {
     } else if (r < 0.5) {
       const b = BARS[Math.floor(rand() * BARS.length)];
       pt = [b.x + (rand() - 0.5) * b.w, b.y + rand() * b.h, b.z + (rand() - 0.5) * b.d];
-    } else if (r < 0.66) {
+    } else if (r < 0.8) {
       const q = LINE_POINTS[Math.floor(rand() * LINE_POINTS.length)];
       pt = [q[0] + (rand() - 0.5) * 0.04, q[1] + (rand() - 0.5) * 0.04, q[2]];
-    } else if (r < 0.8) {
-      const ang = rand() * Math.PI * 2;
-      const rad = DONUT.radius + (rand() - 0.5) * DONUT.tube * 1.6;
-      pt = [DONUT.x + Math.cos(ang) * rad, DONUT.y + Math.sin(ang) * rad, DONUT.z];
     } else if (r < 0.92) {
       const k = PANELS.filter((p) => p.id.startsWith("kpi"))[Math.floor(rand() * 3)];
       pt = [k.x + (rand() - 0.5) * k.w * 0.9, k.y + (rand() - 0.5) * k.h * 0.8, k.z];
