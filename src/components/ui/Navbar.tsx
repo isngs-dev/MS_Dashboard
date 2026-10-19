@@ -24,9 +24,7 @@ export default function Navbar() {
           scrolled ? "bg-ivory/90 shadow-[0_20px_50px_-24px_rgb(90_60_30/0.4)]" : ""
         }`}
       >
-        <a href="#top" aria-label="MS Dashboard, back to top" className="rounded-lg">
-          <Logo />
-        </a>
+        <Logo wordmarkHref="#top" />
         <CtaButton size="sm" pulse={false}>
           {NAV.cta}
         </CtaButton>
